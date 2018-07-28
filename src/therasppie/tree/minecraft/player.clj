@@ -6,12 +6,11 @@
     [therasppie.tree.network.packet.play-client]
     [therasppie.tree.util.general :refer :all])
   (:import
-    (clojure.lang IPersistentVector)
     (it.unimi.dsi.fastutil.longs LongArrayList)
+    (java.util ArrayList)
     (therasppie.tree.minecraft.world Chunk ChunkSection)
     (therasppie.tree.network.packet.play_client ClientChunkData ClientMultiBlockChange ClientUnloadChunk)
-    (therasppie.tree.util ChunkMap ChunkMapImpl DiffChunkHelper DiffChunkHelper$IntIntConsumer PersistentCharArray PersistentCharArray$DiffResultConsumer Vec3i)
-    (java.util ArrayList)))
+    (therasppie.tree.util Arrays Arrays$ODiffConsumer Arrays$CDiffConsumer ChunkMap ChunkMapImpl DiffChunkHelper DiffChunkHelper$IntIntConsumer Vec3i)))
 
 (defn- mk-view []
   {:chunks (ChunkMapImpl.)
@@ -46,15 +45,13 @@
 (defn- diff-chunks [^long x ^long z ^Chunk chunk1 ^Chunk chunk2]
   (when-not (identical? chunk1 chunk2)
     (let [block-changes (LongArrayList.)
-          sections1 ^IPersistentVector (.-sections chunk1)
-          sections2 ^IPersistentVector (.-sections chunk2)]
-      (dotimes [section-index (.count sections1)]
-        (let [section1 ^ChunkSection (.nth sections1 section-index)
-              section2 ^ChunkSection (.nth sections2 section-index)]
-          (when-not (identical? section1 section2)
-            (PersistentCharArray/diff
-              (.-blocks section1) (.-blocks section2)
-              (reify PersistentCharArray$DiffResultConsumer
+          sections1 (.-sections chunk1)
+          sections2 (.-sections chunk2)]
+      (Arrays/diffO world/section-count sections1 sections2
+        (reify Arrays$ODiffConsumer
+          (different [_ section-index section1 section2]
+            (Arrays/diffC world/block-count (.-blocks ^ChunkSection section1) (.-blocks ^ChunkSection section2)
+              (reify Arrays$CDiffConsumer
                 (different [_ i _ new-val]
                   (let [xz (bit-or (bit-shift-left (bit-and i 0xf) 4)
                                    (bit-and (unsigned-bit-shift-right i 4) 0xf))

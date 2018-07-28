@@ -1,22 +1,19 @@
 (ns therasppie.tree.minecraft.world
   (:require
     [better-cond.core :as b]
-    [clojure.spec.alpha :as s]
     [clojure.string :as str]
     [therasppie.tree.util.exception :as ex]
-    [therasppie.tree.util.nbt :as nbt]
     [therasppie.tree.util.path :as path])
   (:import
-    (clojure.lang IPersistentVector)
     (java.io BufferedInputStream DataInputStream RandomAccessFile)
     (java.nio.channels Channels)
     (java.util.zip InflaterInputStream)
-    (therasppie.tree.util ChunkMap IPersistentCharArray PersistentByteArray PersistentCharArray PrimitiveArray Vec3i Arrays)))
+    (therasppie.tree.util Arrays ChunkMap Nbt NibbleArray Vec3i)))
 
 (deftype Chunk [biomes sections])
 
-(def ^:private ^:const biome-count 256)
-(def ^:private ^:const section-count 16)
+(def ^:const biome-count 256)
+(def ^:const section-count 16)
 
 (defn ->Chunk ^Chunk [biomes sections]
   (if-not (and (= biome-count (count biomes))
@@ -26,8 +23,8 @@
 
 (deftype ChunkSection [blocks blockLight skyLight])
 
-(def ^:private ^:const block-count (* 16 16 16))
-(def ^:private ^:const light-count (/ block-count 2))
+(def ^:const block-count (* 16 16 16))
+(def ^:const light-count (/ block-count 2))
 
 (defn ->ChunkSection ^ChunkSection [blocks block-light sky-light]
   (if-not (and (= block-count (count blocks))
@@ -37,62 +34,38 @@
     (ChunkSection. blocks block-light sky-light)))
 
 (def ^ChunkSection empty-chunk-section
-  (let [blocks (PersistentCharArray/create block-count)
-        light (PersistentByteArray/create light-count)]
+  (let [blocks (char-array block-count)
+        light (byte-array light-count)]
     (->ChunkSection blocks light light)))
 
 (def ^Chunk empty-chunk
-  (let [biomes (PersistentByteArray/create biome-count)
-        sections (vec (repeat section-count empty-chunk-section))]
+  (let [biomes (byte-array biome-count)
+        sections (object-array (repeat section-count empty-chunk-section))]
     (->Chunk biomes sections)))
-
-(defn- nth-prim ^long [^PrimitiveArray array ^long index]
-  (.nthPrim array index))
-
-;; ===== Chunk Specs =====
-
-(s/def ::Y (s/int-in 0 16))
-(s/def ::Blocks nbt/byte-array?)
-(s/def ::Add nbt/byte-array?)
-(s/def ::Data nbt/byte-array?)
-(s/def ::BlockLight nbt/byte-array?)
-(s/def ::SkyLight nbt/byte-array?)
-(s/def ::section (s/keys :req-un [::Y ::Blocks ::Data ::BlockLight ::SkyLight] :opt-un [::Add]))
-
-(s/def ::chunk (s/keys :req-un [::Level]))
-(s/def ::Level (s/keys :req-un [::Biomes ::Sections]))
-(s/def ::Biomes nbt/byte-array?)
-(s/def ::Sections (s/coll-of ::section))
 
 ;; ===== Chunk Loading Functions =====
 
 (defn- read-section [section]
-  (let [blocks (:Blocks section)
-        add (some-> (:Add section) (Arrays/asNibbleArray))
-        data (-> (:Data section) (Arrays/asNibbleArray))
-        count (count blocks)
-        persistent-blocks
-        (loop [array (.asTransient ^IPersistentCharArray (.-blocks empty-chunk-section))
-               i 0]
-          (if (< i count)
-            (let [to-add (if-not add 0 (bit-shift-left (nth-prim add i) 8))
-                  block-id (bit-or (Byte/toUnsignedInt (nth-prim blocks i)) to-add)
-                  meta (nth-prim data i)
-                  block (char (bit-or (bit-shift-left block-id 4) meta))]
-              (recur (.assocChar array i block) (inc i)))
-            (.persistent array)))]
-    (->ChunkSection persistent-blocks (:BlockLight section) (:SkyLight section))))
+  (let [raw-blocks (get section "Blocks")
+        add (get section "Add")
+        add (when add (NibbleArray/of add))
+        data (-> (get section "Data") (NibbleArray/of))
+        blocks (aclone ^chars (.-blocks empty-chunk-section))]
 
-(s/def ::region-chunk-loc (s/tuple (s/int-in 0 32) (s/int-in 0 32)))
+    (dotimes [i (alength blocks)]
+      (let [to-add (if-not add 0 (bit-shift-left (.nth ^NibbleArray add i) 8))
+            block-id (bit-or to-add (Byte/toUnsignedInt (aget ^bytes raw-blocks i)))
+            meta (.nth ^NibbleArray data i)
+            block (char (bit-or (bit-shift-left block-id 4) meta))]
+        (aset blocks i block)))
+
+    (->ChunkSection blocks (get section "BlockLight") (get section "SkyLight"))))
+
 (defn read-chunk-from-region-file
   "Tries to load chunk from a file. If the chunk is not available, returns nil.
   If the chunk is available, but malformed, throws an exception."
   [path region-chunk-loc]
   (b/cond
-    :let [region-chunk-loc (let [x (s/conform ::region-chunk-loc region-chunk-loc)]
-                             (if (s/invalid? x)
-                               (ex/throw-io (str "Invalid region chunk loc: " (s/explain-str ::region-chunk-loc region-chunk-loc)))
-                               x))]
     :when (path/exists? path)
     (with-open [file (RandomAccessFile. (path/to-file path) "r")]
       (.seek file (* 4 (+ (region-chunk-loc 0) (* 32 (region-chunk-loc 1)))))
@@ -110,30 +83,26 @@
                                            (InflaterInputStream.)
                                            (BufferedInputStream.)
                                            (DataInputStream.))]
-                      (nbt/read-nbt stream))]
-            (when-not (s/valid? ::chunk nbt)
-              (ex/throw-io (str "Invalid chunk: " (s/explain-str ::chunk nbt))))
-            (let [level (:Level nbt)
-                  biomes (:Biomes level)
-                  sections (reduce
-                             (fn [sections section]
-                               (let [section-y (:Y section)]
-                                 (if-not (identical? (sections section-y) empty-chunk-section)
-                                   (ex/throw-io (str "Duplicate chunk section: " section-y))
-                                   (assoc sections section-y (read-section section)))))
-                             (.-sections empty-chunk) (:Sections level))]
+                      (Nbt/readNbt stream))]
+            #_(when-not (s/valid? ::chunk nbt)
+                (ex/throw-io (str "Invalid chunk: " (s/explain-str ::chunk nbt))))
+            (let [level (get nbt "Level")
+                  biomes (get level "Biomes")
+                  sections (aclone ^objects (.-sections empty-chunk))]
+              (run!
+                (fn [section]
+                  (let [section-y (get section "Y")]
+                    (when-not (identical? empty-chunk-section (aget sections section-y))
+                      (ex/throw-io (str "Duplicate chunk section: " section-y)))
+                    (aset sections section-y (read-section section))))
+                (get level "Sections"))
               (->Chunk biomes sections))))))))
 
-(s/def ::chunk-loc (s/tuple int? int?))
 (defn read-chunk-from-region-directory
   "Tries to load chunk from a directory. If the chunk is not available, returns nil.
   If the chunk is available, but malformed, throws an exception."
   [path chunk-loc]
-  (let [chunk-loc (let [x (s/conform ::chunk-loc chunk-loc)]
-                    (if (s/invalid? x)
-                      (ex/throw-io (str "Invalid chunk loc: " (s/explain-str ::chunk-loc chunk-loc)))
-                      x))
-        region-loc (mapv #(bit-shift-right % 5) chunk-loc)
+  (let [region-loc (mapv #(bit-shift-right % 5) chunk-loc)
         region-chunk-loc (mapv #(bit-and % 2r11111) chunk-loc)]
     (read-chunk-from-region-file
       (path/resolve path (str "r." (region-loc 0) "." (region-loc 1) ".mca"))
@@ -183,24 +152,24 @@
    (if (valid-chunk? vec)
      (let [y (.-y vec)
            section-idx (unsigned-bit-shift-right y 4)
-           section ^ChunkSection (nth (.-sections chunk) section-idx)
+           section ^ChunkSection (aget ^objects (.-sections chunk) section-idx)
            idx (bit-or (.-x vec)
                        (bit-shift-left (.-z vec) 4)
                        (bit-shift-left (bit-and y 0xf) 8))]
-       (nth-prim (.-blocks section) idx))
+       (aget ^chars (.-blocks section) idx))
      default-block))
   (^Chunk [^Chunk chunk ^Vec3i vec ^long block]
    (if (valid-chunk? vec)
      (let [y (.-y vec)
            section-idx (unsigned-bit-shift-right y 4)
-           section ^ChunkSection (nth (.-sections chunk) section-idx)
+           section ^ChunkSection (aget ^objects (.-sections chunk) section-idx)
            idx (bit-or (.-x vec)
                        (bit-shift-left (.-z vec) 4)
                        (bit-shift-left (bit-and y 0xf) 8))]
        (->Chunk (.-biomes chunk)
-         (.assocN ^IPersistentVector (.-sections chunk) section-idx
+         (Arrays/assocO (.-sections chunk) section-idx
            (->ChunkSection
-             (.assocChar ^IPersistentCharArray (.-blocks section) idx (char block))
+             (Arrays/assocC (.-blocks section) idx (char block))
              (.-blockLight section)
              (.-skyLight section)))))
      chunk)))

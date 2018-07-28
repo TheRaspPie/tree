@@ -6,9 +6,7 @@
     (io.netty.buffer ByteBuf)
     (it.unimi.dsi.fastutil.longs LongList)
     (java.util.function LongConsumer)
-    (therasppie.tree.minecraft.world Chunk ChunkSection)
-    (clojure.lang Indexed)
-    (therasppie.tree.util IPersistentCharArray PersistentByteArray)))
+    (therasppie.tree.minecraft.world Chunk ChunkSection)))
 
 (defn- reversed-two-tuple [s1 s2]
   (fn
@@ -248,24 +246,24 @@
    ^boolean ground-up-continuous? ^int primary-bit-mask
    chunk block-entities])
 
-(defn- write-chunk-data [buf ^long bit-mask ^Chunk chunk]
+(defn- write-chunk-data [^ByteBuf buf ^long bit-mask ^Chunk chunk]
   (let [length (+ 256 (* (Long/bitCount bit-mask) (+ 4100 (* 13 64 8))))]
     (varint buf length)
-    (.ensureWritable ^ByteBuf buf length))
-  (let [sections ^Indexed (.-sections chunk)]
-    (dotimes [i (.count sections)]
+    (.ensureWritable buf length))
+  (let [sections ^objects (.-sections chunk)]
+    (dotimes [i (alength sections)]
       (when-not (zero? (bit-and bit-mask (bit-shift-left 1 i)))
-        (let [section ^ChunkSection (.nth sections i)]
+        (let [section ^ChunkSection (aget sections i)]
           ;; bits per block
           (uint8 buf 13)
           ;; palette length
           (varint buf 0)
           (varint buf (* 13 64))
-          (let [blocks ^IPersistentCharArray (.-blocks section)
-                length (count blocks)]
+          (let [blocks ^chars (.-blocks section)
+                length (alength blocks)]
             (loop [value 0 bits 0 index (int 0)]
               (when (< index length)
-                (let [block (int (.nthChar blocks index))
+                (let [block (int (aget blocks index))
                       b (bit-and (Integer/toUnsignedLong block) 2r1111111111111)
                       value (bit-or value (bit-shift-left b bits))
                       bits (+ bits 13)]
@@ -276,9 +274,9 @@
                             value (unsigned-bit-shift-right b (- 13 bits))]
                         (recur value bits (inc index))))
                     (recur value bits (inc index)))))))
-          (PersistentByteArray/write (.-blockLight section) buf)
-          (PersistentByteArray/write (.-skyLight section) buf)))))
-  (PersistentByteArray/write (.-biomes chunk) buf))
+          (.writeBytes buf ^bytes (.-blockLight section))
+          (.writeBytes buf ^bytes (.-skyLight section))))))
+  (.writeBytes buf ^bytes (.-biomes chunk)))
 
 (let [varint-nbt-seq (sequence-with-length varint nbt)]
   (defn client-chunk-data

@@ -1,13 +1,13 @@
 (ns therasppie.tree.network.packet.packet
   (:require
-    [clojure.data.json :as json]
-    [therasppie.tree.util.nbt :as nbt])
+    [clojure.data.json :as json])
   (:import
-    (io.netty.buffer ByteBuf ByteBufInputStream ByteBufOutputStream)
+    (io.netty.buffer ByteBuf ByteBufInputStream)
     (java.nio.charset StandardCharsets)
     (java.util UUID)
     (therasppie.tree.network.codec VarIntUtil)
-    (therasppie.tree.network.packet Prims)))
+    (therasppie.tree.network.packet Prims)
+    (therasppie.tree.util Nbt)))
 
 (defn- inline-fn [read-sym write-sym]
   (fn
@@ -119,9 +119,9 @@
 
 (defn nbt
   ([buf]
-   (nbt/read-nbt (ByteBufInputStream. buf)))
-  ([buf value]
-   (nbt/write-nbt (ByteBufOutputStream. buf) value)))
+   (Nbt/readNbt (ByteBufInputStream. buf)))
+  #_([buf value]
+      (Nbt/writeNbt (ByteBufOutputStream. buf) value)))
 
 (defn optional [serialize]
   (fn

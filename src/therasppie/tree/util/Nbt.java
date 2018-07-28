@@ -8,20 +8,20 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-public class Nbt
+public final class Nbt
 {
-    public static final int END_TAG = 0;
-    public static final int BYTE_TAG = 1;
-    public static final int SHORT_TAG = 2;
-    public static final int INT_TAG = 3;
-    public static final int LONG_TAG = 4;
-    public static final int FLOAT_TAG = 5;
-    public static final int DOUBLE_TAG = 6;
-    public static final int BYTE_ARRAY_TAG = 7;
-    public static final int STRING_TAG = 8;
-    public static final int LIST_TAG = 9;
-    public static final int COMPOUND_TAG = 10;
-    public static final int INT_ARRAY_TAG = 11;
+    private static final int END_TAG = 0;
+    private static final int BYTE_TAG = 1;
+    private static final int SHORT_TAG = 2;
+    private static final int INT_TAG = 3;
+    private static final int LONG_TAG = 4;
+    private static final int FLOAT_TAG = 5;
+    private static final int DOUBLE_TAG = 6;
+    private static final int BYTE_ARRAY_TAG = 7;
+    private static final int STRING_TAG = 8;
+    private static final int LIST_TAG = 9;
+    private static final int COMPOUND_TAG = 10;
+    private static final int INT_ARRAY_TAG = 11;
 
     public static Object readTag(DataInput input, int id) throws IOException
     {
@@ -77,15 +77,15 @@ public class Nbt
         return list;
     }
 
-    public static ByteArray readByteArray(DataInput input) throws IOException
+    public static byte[] readByteArray(DataInput input) throws IOException
     {
         int length = input.readInt();
         byte[] array = new byte[length];
         input.readFully(array);
-        return Arrays.wrappedArray(array);
+        return array;
     }
 
-    public static IntArray readIntArray(DataInput input) throws IOException
+    public static int[] readIntArray(DataInput input) throws IOException
     {
         int length = input.readInt();
         int[] array = new int[length];
@@ -93,7 +93,7 @@ public class Nbt
         {
             array[i] = input.readInt();
         }
-        return Arrays.wrappedArray(array);
+        return array;
     }
 
     public static Map<String, Object> readNbt(DataInput input) throws IOException

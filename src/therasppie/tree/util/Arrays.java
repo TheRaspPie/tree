@@ -2,112 +2,51 @@ package therasppie.tree.util;
 
 public final class Arrays
 {
-    private Arrays()
+    public static <T> T[] assocO(T[] array, int i, T v)
     {
+        T[] newArray = array.clone();
+        newArray[i] = v;
+        return newArray;
     }
 
-    public static PrimitiveArray asNibbleArray(ByteArray byteArray)
+    public static char[] assocC(char[] array, int i, char v)
     {
-        return new PrimitiveArray()
+        char[] newArray = array.clone();
+        newArray[i] = v;
+        return newArray;
+    }
+
+    public static <T> void diffO(int length, T[] array1, T[] array2, ODiffConsumer<T> consumer)
+    {
+        for (int i = length - 1; i >= 0; i--)
         {
-            @Override
-            public long nthPrim(int i)
+            T v1 = array1[i], v2 = array2[i];
+            if (v1 != v2)
             {
-                int raw = Byte.toUnsignedInt(byteArray.nthByte(i / 2));
-                return (i & 1) == 0 ? raw & 0xf : raw >>> 4;
+                consumer.different(i, v1, v2);
             }
-
-            @Override
-            public int count()
-            {
-                return byteArray.count() * 2;
-            }
-        };
+        }
     }
 
-    public static ByteArray wrappedArray(byte[] array)
+    public static void diffC(int length, char[] array1, char[] array2, CDiffConsumer consumer)
     {
-        return new ByteArray()
+        for (int i = length - 1; i >= 0; i--)
         {
-            @Override
-            public byte nthByte(int i)
+            char v1 = array1[i], v2 = array2[i];
+            if (v1 != v2)
             {
-                return array[i];
+                consumer.different(i, v1, v2);
             }
-
-            @Override
-            public ByteArray assocByte(int i, byte val)
-            {
-                array[i] = val;
-                return this;
-            }
-
-            @Override
-            public int count()
-            {
-                return array.length;
-            }
-        };
+        }
     }
 
-    public static IntArray wrappedArray(int[] array)
+    public interface ODiffConsumer<T>
     {
-        return new IntArray()
-        {
-            @Override
-            public int nthInt(int i)
-            {
-                return array[i];
-            }
-
-            @Override
-            public IntArray assocInt(int i, int val)
-            {
-                array[i] = val;
-                return this;
-            }
-
-            @Override
-            public int count()
-            {
-                return array.length;
-            }
-        };
+        void different(int i, T oldValue, T newValue);
     }
 
-    public static ByteArray copyOnWriteByteArray(int count)
+    public interface CDiffConsumer
     {
-        return copyOnWrite(new byte[count]);
-    }
-
-    public static ByteArray copyOnWriteByteArray(byte[] array)
-    {
-        return copyOnWrite(array.clone());
-    }
-
-    private static ByteArray copyOnWrite(byte[] array)
-    {
-        return new ByteArray()
-        {
-            @Override
-            public byte nthByte(int i)
-            {
-                return array[i];
-            }
-
-            @Override
-            public ByteArray assocByte(int i, byte val)
-            {
-                byte[] newArray = array.clone();
-                newArray[i] = val;
-                return copyOnWrite(newArray);
-            }
-
-            @Override
-            public int count()
-            {
-                return array.length;
-            }
-        };
+        void different(int i, char oldValue, char newValue);
     }
 }

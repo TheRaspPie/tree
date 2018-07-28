@@ -2,7 +2,7 @@ package therasppie.tree.util;
 
 import clojure.lang.Indexed;
 
-public final class Vec3i implements IntArray, Indexed
+public final class Vec3i implements Indexed
 {
     public final int x;
     public final int y;
@@ -18,7 +18,13 @@ public final class Vec3i implements IntArray, Indexed
     @Override
     public Object nth(int i)
     {
-        return nthInt(i);
+        switch (i)
+        {
+            case 0: return x;
+            case 1: return y;
+            case 2: return z;
+        }
+        throw new IndexOutOfBoundsException();
     }
 
     @Override
@@ -31,30 +37,6 @@ public final class Vec3i implements IntArray, Indexed
             case 2: return z;
         }
         return notFound;
-    }
-
-    @Override
-    public int nthInt(int i)
-    {
-        switch (i)
-        {
-            case 0: return x;
-            case 1: return y;
-            case 2: return z;
-        }
-        throw new IndexOutOfBoundsException();
-    }
-
-    @Override
-    public IntArray assocInt(int i, int val)
-    {
-        switch (i)
-        {
-            case 0: return new Vec3i(val, y, z);
-            case 1: return new Vec3i(x, val, z);
-            case 2: return new Vec3i(x, y, val);
-        }
-        throw new IndexOutOfBoundsException();
     }
 
     @Override
